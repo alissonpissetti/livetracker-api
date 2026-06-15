@@ -1,0 +1,16 @@
+services:
+  api:
+    build: .
+    container_name: livetracker-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      API_BEARER_TOKEN: ${API_BEARER_TOKEN:-}
+      DATABASE_PATH: /data/livetracker.sqlite
+    volumes:
+      - livetracker-data:/data
+
+volumes:
+  livetracker-data:
