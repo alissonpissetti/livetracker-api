@@ -25,7 +25,7 @@
     "class-validator": "^0.14.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "sqlite3": "^5.1.7",
+    "mysql2": "^3.14.0",
     "typeorm": "^0.3.20"
   },
   "devDependencies": {
@@ -49,7 +49,8 @@
     "ts-loader": "^9.5.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "sqlite3": "^5.1.7"
   },
   "jest": {
     "moduleFileExtensions": ["js", "json", "ts"],

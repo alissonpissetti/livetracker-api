@@ -2,54 +2,56 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
 @Entity('locations')
+@Index(['device_id', 'received_at'])
 export class Location {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ length: 32 })
   device_id: string;
 
-  @Column('real')
+  @Column('double')
   latitude: number;
 
-  @Column('real')
+  @Column('double')
   longitude: number;
 
-  @Column('real', { nullable: true })
+  @Column('double', { nullable: true })
   altitude?: number;
 
-  @Column('real', { nullable: true })
+  @Column('double', { nullable: true })
   speed_knots?: number;
 
-  @Column('real', { nullable: true })
+  @Column('double', { nullable: true })
   accuracy_m?: number;
 
-  @Column('integer', { nullable: true })
+  @Column('int', { nullable: true })
   satellites_visible?: number;
 
-  @Column('integer', { nullable: true })
+  @Column('int', { nullable: true })
   satellites_used?: number;
 
-  @Column({ nullable: true })
+  @Column({ length: 20, nullable: true })
   imei?: string;
 
-  @Column({ nullable: true })
+  @Column({ length: 24, nullable: true })
   iccid?: string;
 
-  @Column({ nullable: true })
+  @Column({ length: 20, nullable: true })
   imsi?: string;
 
-  @Column({ nullable: true })
+  @Column({ length: 64, nullable: true })
   operator?: string;
 
-  @Column({ nullable: true })
+  @Column({ length: 128, nullable: true })
   apn?: string;
 
-  @Column()
+  @Column({ length: 32 })
   recorded_at: string;
 
   @CreateDateColumn()
