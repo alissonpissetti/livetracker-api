@@ -6,6 +6,7 @@ import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { createTypeOrmConfig } from './database/typeorm.config';
 import { DevicesModule } from './devices/devices.module';
+import { GeolocationModule } from './geolocation/geolocation.module';
 import { HealthController } from './health/health.controller';
 import { LocationsModule } from './locations/locations.module';
 import { StoreModule } from './store/store.module';
@@ -24,6 +25,7 @@ import { UsersModule } from './users/users.module';
     AccountModule,
     AdminModule,
     LocationsModule,
+    GeolocationModule,
     DevicesModule,
     StoreModule,
     SubscriptionsModule,
