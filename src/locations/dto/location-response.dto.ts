@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { latestLocationsExample } from '../../swagger/location.examples';
+import { DeviceConfigDto } from '../../devices/dto/device-config.dto';
 
 export class CreateLocationResponseDto {
   @ApiProperty({
@@ -19,6 +20,9 @@ export class CreateLocationResponseDto {
     example: '2026-06-15T22:30:00.000Z',
   })
   received_at: string;
+
+  @ApiPropertyOptional({ type: DeviceConfigDto })
+  device_config?: DeviceConfigDto;
 }
 
 export class LocationRecordDto {

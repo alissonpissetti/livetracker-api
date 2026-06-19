@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -6,6 +7,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateLocationDto } from '../locations/dto/create-location.dto';
+import { DEVICE_CONFIG } from './device-config.constants';
+import { DeviceConfigDto } from './dto/device-config.dto';
 import { BlockDeviceDto } from './dto/block-device.dto';
 import { Device } from './entities/device.entity';
 
@@ -32,6 +35,76 @@ export class DevicesService {
     }
 
     return device;
+  }
+
+  async findByDeviceIdOptional(deviceId?: string | null): Promise<Device | null> {
+    if (!deviceId) {
+      return null;
+    }
+
+    return this.devicesRepository.findOne({
+      where: { device_id: deviceId.trim() },
+    });
+  }
+
+  isEmergencyActive(device: Device): boolean {
+    return !!device.emergency_until && device.emergency_until.getTime() > Date.now();
+  }
+
+  getDeviceConfig(device: Device): DeviceConfigDto {
+    const emergencyActive = this.isEmergencyActive(device);
+
+    return {
+      mode: emergencyActive ? 'emergency' : 'normal',
+      emergency_until: emergencyActive
+        ? device.emergency_until!.toISOString()
+        : null,
+      report_interval_sec: emergencyActive
+        ? DEVICE_CONFIG.REPORT_INTERVAL_EMERGENCY_SEC
+        : DEVICE_CONFIG.REPORT_INTERVAL_MOVING_SEC,
+      config_poll_interval_sec: DEVICE_CONFIG.CONFIG_POLL_INTERVAL_SEC,
+      stop_distance_m: DEVICE_CONFIG.STOP_DISTANCE_M,
+      stop_samples_required: DEVICE_CONFIG.STOP_SAMPLES_REQUIRED,
+    };
+  }
+
+  getEmergencyState(device: Device | null): {
+    emergency_until: string | null;
+    emergency_active: boolean;
+  } {
+    if (!device || !this.isEmergencyActive(device)) {
+      return { emergency_until: null, emergency_active: false };
+    }
+
+    return {
+      emergency_until: device.emergency_until!.toISOString(),
+      emergency_active: true,
+    };
+  }
+
+  async activateEmergency(deviceId: string): Promise<Device> {
+    const device = await this.findByDeviceId(deviceId);
+    const now = new Date();
+
+    device.emergency_activated_at = now;
+    device.emergency_until = new Date(
+      now.getTime() + DEVICE_CONFIG.EMERGENCY_DURATION_MS,
+    );
+
+    return this.devicesRepository.save(device);
+  }
+
+  async deactivateEmergency(deviceId: string): Promise<Device> {
+    const device = await this.findByDeviceId(deviceId);
+
+    if (!this.isEmergencyActive(device) && !device.emergency_activated_at) {
+      throw new BadRequestException('Modo emergência não está ativo');
+    }
+
+    device.emergency_until = null;
+    device.emergency_activated_at = null;
+
+    return this.devicesRepository.save(device);
   }
 
   async assertCanReceiveLocations(deviceId: string): Promise<Device> {
@@ -88,9 +161,5 @@ export class DevicesService {
 
     const device = this.devicesRepository.create({ device_id: normalized });
     return this.devicesRepository.save(device);
-  }
-
-  private async findOrCreate(deviceId: string): Promise<Device> {
-    return this.ensureExists(deviceId);
   }
 }

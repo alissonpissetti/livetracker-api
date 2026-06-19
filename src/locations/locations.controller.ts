@@ -31,12 +31,16 @@ import {
   LatestLocationsResponseDto,
 } from './dto/location-response.dto';
 import { LocationsService } from './locations.service';
+import { DevicesService } from '../devices/devices.service';
 
 @ApiTags('locations')
 @Controller('v1/locations')
 @UseGuards(OptionalBearerGuard)
 export class LocationsController {
-  constructor(private readonly locationsService: LocationsService) {}
+  constructor(
+    private readonly locationsService: LocationsService,
+    private readonly devicesService: DevicesService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -76,11 +80,13 @@ Registra uma nova posição enviada pelo rastreador.
   })
   async create(@Body() dto: CreateLocationDto) {
     const location = await this.locationsService.create(dto);
+    const device = await this.devicesService.ensureExists(location.device_id);
 
     return {
       id: location.id,
       device_id: location.device_id,
       received_at: location.received_at.toISOString(),
+      device_config: this.devicesService.getDeviceConfig(device),
     };
   }
 

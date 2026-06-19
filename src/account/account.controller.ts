@@ -42,9 +42,17 @@ import {
   TrackingShareListResponseDto,
 } from '../tracking-shares/dto/tracking-share.dto';
 import { TrackingSharesService } from '../tracking-shares/tracking-shares.service';
+import { DevicesService } from '../devices/devices.service';
 
-function toDeviceDto(subscription: Subscription, service: SubscriptionsService): AccountDeviceDto {
-  const isActive = service.isActive(subscription);
+async function toDeviceDto(
+  subscription: Subscription,
+  subscriptionsService: SubscriptionsService,
+  devicesService: DevicesService,
+): Promise<AccountDeviceDto> {
+  const isActive = subscriptionsService.isActive(subscription);
+  const hardware = await devicesService.findByDeviceIdOptional(subscription.device_id);
+  const emergency = devicesService.getEmergencyState(hardware);
+
   return {
     id: subscription.id,
     label: subscription.label,
@@ -55,6 +63,8 @@ function toDeviceDto(subscription: Subscription, service: SubscriptionsService):
     is_active: isActive,
     awaiting_activation: !subscription.device_id,
     order_id: subscription.order_id,
+    emergency_until: emergency.emergency_until,
+    emergency_active: emergency.emergency_active,
   };
 }
 
@@ -83,6 +93,7 @@ export class AccountController {
     private readonly subscriptionsService: SubscriptionsService,
     private readonly locationsService: LocationsService,
     private readonly trackingSharesService: TrackingSharesService,
+    private readonly devicesService: DevicesService,
   ) {}
 
   @Get('orders')
@@ -103,8 +114,10 @@ export class AccountController {
   async devices(@CurrentUser() user: AuthUser) {
     const subscriptions = await this.subscriptionsService.findByUserId(user.id);
     return {
-      devices: subscriptions.map((item) =>
-        toDeviceDto(item, this.subscriptionsService),
+      devices: await Promise.all(
+        subscriptions.map((item) =>
+          toDeviceDto(item, this.subscriptionsService, this.devicesService),
+        ),
       ),
     };
   }
@@ -124,7 +137,7 @@ export class AccountController {
       dto.device_id,
       user.id,
     );
-    return toDeviceDto(subscription, this.subscriptionsService);
+    return toDeviceDto(subscription, this.subscriptionsService, this.devicesService);
   }
 
   @Patch('devices/:id')
@@ -145,7 +158,7 @@ export class AccountController {
         icon: dto.icon as DeviceIcon | undefined,
       },
     );
-    return toDeviceDto(subscription, this.subscriptionsService);
+    return toDeviceDto(subscription, this.subscriptionsService, this.devicesService);
   }
 
   @Get('devices/:id/locations')
@@ -178,7 +191,11 @@ export class AccountController {
     );
 
     return {
-      device: toDeviceDto(subscription, this.subscriptionsService),
+      device: await toDeviceDto(
+        subscription,
+        this.subscriptionsService,
+        this.devicesService,
+      ),
       locations: locations.map(toLocationDto),
     };
   }
@@ -190,7 +207,51 @@ export class AccountController {
   @ApiOkResponse({ type: AccountDeviceDto })
   async renewDevice(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     const subscription = await this.subscriptionsService.renew(id, user.id, 30);
-    return toDeviceDto(subscription, this.subscriptionsService);
+    return toDeviceDto(subscription, this.subscriptionsService, this.devicesService);
+  }
+
+  @Post('devices/:id/emergency')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Ativar modo emergência por 30 minutos' })
+  @ApiParam({ name: 'id', description: 'ID do slot/equipamento na conta' })
+  @ApiOkResponse({ type: AccountDeviceDto })
+  async activateEmergency(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    const subscription = await this.subscriptionsService.findByIdForUser(id, user.id);
+
+    if (!subscription.device_id) {
+      throw new BadRequestException(
+        'Ative o IMEI do equipamento antes de usar o modo emergência',
+      );
+    }
+
+    if (!this.subscriptionsService.isActive(subscription)) {
+      throw new BadRequestException('Assinatura inativa — modo emergência indisponível');
+    }
+
+    await this.devicesService.activateEmergency(subscription.device_id);
+    return await toDeviceDto(subscription, this.subscriptionsService, this.devicesService);
+  }
+
+  @Delete('devices/:id/emergency')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Encerrar modo emergência manualmente' })
+  @ApiParam({ name: 'id', description: 'ID do slot/equipamento na conta' })
+  @ApiOkResponse({ type: AccountDeviceDto })
+  async deactivateEmergency(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    const subscription = await this.subscriptionsService.findByIdForUser(id, user.id);
+
+    if (!subscription.device_id) {
+      throw new BadRequestException('Equipamento sem IMEI ativado');
+    }
+
+    await this.devicesService.deactivateEmergency(subscription.device_id);
+    return await toDeviceDto(subscription, this.subscriptionsService, this.devicesService);
   }
 
   @Post('devices/:id/share-links')
