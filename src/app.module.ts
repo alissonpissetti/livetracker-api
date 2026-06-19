@@ -13,6 +13,7 @@ import { StoreModule } from './store/store.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { TrackingSharesModule } from './tracking-shares/tracking-shares.module';
 import { UsersModule } from './users/users.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { UsersModule } from './users/users.module';
     StoreModule,
     SubscriptionsModule,
     TrackingSharesModule,
+    WebhooksModule,
   ],
   controllers: [HealthController],
 })

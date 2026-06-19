@@ -51,6 +51,9 @@ export class Subscription {
   @Column({ type: 'datetime' })
   current_period_end: Date;
 
+  @Column({ type: 'datetime', nullable: true })
+  current_period_start: Date | null;
+
   @Column({ nullable: true })
   order_id?: string;
 

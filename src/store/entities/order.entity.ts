@@ -11,6 +11,9 @@ import { User } from '../../users/entities/user.entity';
 import { OrderItem } from './order-item.entity';
 
 export type OrderStatus = 'paid' | 'pending';
+export type OrderType = 'purchase' | 'renewal';
+export type PaymentMethod = 'pix' | 'creditCard';
+export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled';
 
 @Entity('orders')
 export class Order {
@@ -30,8 +33,20 @@ export class Order {
   @Column({ length: 255 })
   customer_email: string;
 
-  @Column({ length: 16, default: 'paid' })
+  @Column({ length: 14, nullable: true })
+  customer_cpf: string | null;
+
+  @Column({ length: 20, nullable: true })
+  customer_phone: string | null;
+
+  @Column({ length: 16, default: 'pending' })
   status: OrderStatus;
+
+  @Column({ length: 16, default: 'purchase' })
+  order_type: OrderType;
+
+  @Column({ nullable: true })
+  subscription_id: string | null;
 
   @Column({ type: 'int' })
   total_cents: number;
@@ -44,6 +59,27 @@ export class Order {
 
   @Column({ length: 32, nullable: true })
   voucher_code: string | null;
+
+  @Column({ length: 16, nullable: true })
+  payment_method: PaymentMethod | null;
+
+  @Column({ length: 16, nullable: true })
+  payment_status: PaymentStatus | null;
+
+  @Column({ type: 'int', default: 0 })
+  payment_discount_cents: number;
+
+  @Column({ type: 'int', nullable: true })
+  installment_count: number | null;
+
+  @Column({ length: 64, nullable: true })
+  asaas_customer_id: string | null;
+
+  @Column({ length: 64, nullable: true })
+  asaas_payment_id: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  paid_at: Date | null;
 
   @OneToMany(() => OrderItem, (item) => item.order, { cascade: true })
   items: OrderItem[];

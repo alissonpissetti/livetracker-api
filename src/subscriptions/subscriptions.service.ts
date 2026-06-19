@@ -27,6 +27,37 @@ export class SubscriptionsService {
     return subscription.current_period_end.getTime() > Date.now();
   }
 
+  buildPeriodInfo(subscription: Subscription) {
+    const start =
+      subscription.current_period_start ?? subscription.created_at ?? new Date();
+    const end = subscription.current_period_end;
+    const msPerDay = 86_400_000;
+    const totalDays = Math.max(
+      1,
+      Math.round((end.getTime() - start.getTime()) / msPerDay),
+    );
+    const daysRemaining = Math.max(
+      0,
+      Math.ceil((end.getTime() - Date.now()) / msPerDay),
+    );
+
+    let period_label = `${totalDays} dias`;
+    if (totalDays >= 360) {
+      period_label = '1 ano';
+    } else if (totalDays >= 175 && totalDays < 195) {
+      period_label = '6 meses';
+    } else if (totalDays <= 31) {
+      period_label = '1 mês';
+    }
+
+    return {
+      current_period_start: start.toISOString(),
+      period_days: totalDays,
+      period_label,
+      days_remaining: daysRemaining,
+    };
+  }
+
   async findByUserId(userId: string): Promise<Subscription[]> {
     return this.subscriptionsRepository.find({
       where: { user_id: userId },
@@ -80,12 +111,14 @@ export class SubscriptionsService {
     const slots: Subscription[] = [];
 
     for (let index = 0; index < input.quantity; index++) {
+      const periodStart = new Date();
       const slot = this.subscriptionsRepository.create({
         user_id: input.user.id,
         customer_email: input.user.email,
         customer_name: input.user.name,
         status: 'pending_device',
-        current_period_end: this.addDays(new Date(), input.daysPerSlot),
+        current_period_start: periodStart,
+        current_period_end: this.addDays(periodStart, input.daysPerSlot),
         order_id: input.orderId,
         label: input.labelPrefix
           ? `${input.labelPrefix} #${index + 1}`
@@ -144,12 +177,23 @@ export class SubscriptionsService {
   }
 
   async renew(subscriptionId: string, userId: string, days = 30): Promise<Subscription> {
+    return this.extendPeriod(subscriptionId, userId, days);
+  }
+
+  async extendPeriod(
+    subscriptionId: string,
+    userId: string,
+    days: number,
+  ): Promise<Subscription> {
     const subscription = await this.findByIdForUser(subscriptionId, userId);
 
-    const base =
-      subscription.current_period_end.getTime() > Date.now()
-        ? subscription.current_period_end
-        : new Date();
+    const now = Date.now();
+    const endMs = subscription.current_period_end.getTime();
+    const base = endMs > now ? subscription.current_period_end : new Date();
+
+    if (endMs <= now) {
+      subscription.current_period_start = new Date();
+    }
 
     subscription.current_period_end = this.addDays(base, days);
     subscription.status = subscription.device_id ? 'active' : 'pending_device';

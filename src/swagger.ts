@@ -7,7 +7,7 @@ import { apiReference } from '@scalar/nestjs-api-reference';
 const API_DESCRIPTION = `
 ## Visão geral
 
-API de rastreamento GPS para equipamentos **LilyGO T-SIM7080G** e compatíveis.
+API de rastreamento GPS para equipamentos **LIVRE TRACKER**.
 O firmware envia posições periodicamente; esta API armazena e permite consultar o histórico recente.
 
 ## Fluxo

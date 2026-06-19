@@ -52,6 +52,7 @@ async function toDeviceDto(
   const isActive = subscriptionsService.isActive(subscription);
   const hardware = await devicesService.findHardwareForSubscription(subscription.device_id);
   const emergency = devicesService.getEmergencyState(hardware);
+  const period = subscriptionsService.buildPeriodInfo(subscription);
 
   return {
     id: subscription.id,
@@ -59,7 +60,11 @@ async function toDeviceDto(
     icon: subscription.icon ?? 'vehicle',
     device_id: subscription.device_id,
     status: subscription.status,
+    current_period_start: period.current_period_start,
     current_period_end: subscription.current_period_end.toISOString(),
+    period_days: period.period_days,
+    period_label: period.period_label,
+    days_remaining: period.days_remaining,
     is_active: isActive,
     awaiting_activation: !subscription.device_id,
     order_id: subscription.order_id,
@@ -201,16 +206,6 @@ export class AccountController {
       ),
       locations: locations.map(toLocationDto),
     };
-  }
-
-  @Patch('devices/:id/renew')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Renovar assinatura do equipamento (+30 dias)' })
-  @ApiParam({ name: 'id' })
-  @ApiOkResponse({ type: AccountDeviceDto })
-  async renewDevice(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    const subscription = await this.subscriptionsService.renew(id, user.id, 30);
-    return toDeviceDto(subscription, this.subscriptionsService, this.devicesService);
   }
 
   @Post('devices/:id/emergency')

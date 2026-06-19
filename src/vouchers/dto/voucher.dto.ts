@@ -75,4 +75,9 @@ export class VoucherPreviewDto {
   @Type(() => CheckoutItemDto)
   @ArrayMinSize(1)
   items: CheckoutItemDto[];
+
+  @ApiPropertyOptional({ enum: ['pix', 'card'], example: 'pix' })
+  @IsOptional()
+  @IsIn(['pix', 'creditCard'])
+  payment_method?: 'pix' | 'creditCard';
 }

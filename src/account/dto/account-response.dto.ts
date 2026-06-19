@@ -23,7 +23,19 @@ export class AccountDeviceDto {
   status: string;
 
   @ApiProperty()
+  current_period_start: string;
+
+  @ApiProperty()
   current_period_end: string;
+
+  @ApiProperty({ example: 365 })
+  period_days: number;
+
+  @ApiProperty({ example: '1 ano' })
+  period_label: string;
+
+  @ApiProperty({ example: 312 })
+  days_remaining: number;
 
   @ApiProperty()
   is_active: boolean;
