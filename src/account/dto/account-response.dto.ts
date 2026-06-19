@@ -39,6 +39,9 @@ export class AccountDeviceDto {
 
   @ApiProperty()
   emergency_active: boolean;
+
+  @ApiProperty()
+  emergency_remaining_sec: number;
 }
 
 export class AccountDevicesResponseDto {

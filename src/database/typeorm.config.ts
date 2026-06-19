@@ -106,6 +106,7 @@ function buildMariaDbConfig(config: ConfigService): TypeOrmModuleOptions {
     migrationsRun: flags.migrationsRun,
     logging: flags.logging,
     connectTimeout: 30000,
+    timezone: 'Z',
   };
 }
 

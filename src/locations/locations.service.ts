@@ -11,6 +11,10 @@ import {
   isInvalidComparedToPrevious,
 } from './location-quality.util';
 
+const MAX_INCREMENTAL_LOCATIONS = 500;
+const MAX_TAIL_LOCATIONS = 500;
+const MAX_FULL_DAY_LOCATIONS = 10_000;
+
 @Injectable()
 export class LocationsService {
   constructor(
@@ -74,18 +78,113 @@ export class LocationsService {
 
   async findRouteByDevice(
     deviceId: string,
-    options: { limit?: number; from?: string; to?: string } = {},
+    options: {
+      limit?: number;
+      from?: string;
+      to?: string;
+      since?: string;
+      full?: boolean;
+    } = {},
   ): Promise<Location[]> {
-    const locations = await this.findByDevice(deviceId, {
-      ...options,
-      order: 'asc',
-    });
+    let locations: Location[];
+
+    if (options.since) {
+      const limit = Math.min(
+        Math.max(options.limit ?? MAX_INCREMENTAL_LOCATIONS, 1),
+        MAX_INCREMENTAL_LOCATIONS,
+      );
+      locations = await this.findByDevice(deviceId, {
+        limit,
+        from: new Date(new Date(options.since).getTime() + 1).toISOString(),
+        to: options.to,
+        order: 'asc',
+      });
+    } else if (options.full) {
+      locations = await this.findAllInRangeAscending(deviceId, options);
+    } else {
+      const limit = Math.min(
+        Math.max(options.limit ?? MAX_TAIL_LOCATIONS, 1),
+        MAX_TAIL_LOCATIONS,
+      );
+      locations = await this.findRecentTailAscending(deviceId, options, limit);
+    }
 
     if (locations.length >= 2) {
       await this.reconcileValidityFlags(locations);
+      return this.fetchLocationsByIdsAscending(locations.map((location) => location.id));
     }
 
-    return this.findByDevice(deviceId, { ...options, order: 'asc' });
+    return locations;
+  }
+
+  private async findAllInRangeAscending(
+    deviceId: string,
+    options: { from?: string; to?: string },
+  ): Promise<Location[]> {
+    const query = this.locationsRepository
+      .createQueryBuilder('location')
+      .where('location.device_id = :deviceId', { deviceId })
+      .orderBy('location.recorded_at', 'ASC')
+      .addOrderBy('location.received_at', 'ASC')
+      .take(MAX_FULL_DAY_LOCATIONS);
+
+    if (options.from) {
+      query.andWhere('location.received_at >= :from', {
+        from: new Date(options.from),
+      });
+    }
+
+    if (options.to) {
+      query.andWhere('location.received_at <= :to', {
+        to: new Date(options.to),
+      });
+    }
+
+    return query.getMany();
+  }
+
+  private async findRecentTailAscending(
+    deviceId: string,
+    options: { from?: string; to?: string },
+    limit: number,
+  ): Promise<Location[]> {
+    const query = this.locationsRepository
+      .createQueryBuilder('location')
+      .where('location.device_id = :deviceId', { deviceId });
+
+    if (options.from) {
+      query.andWhere('location.received_at >= :from', {
+        from: new Date(options.from),
+      });
+    }
+
+    if (options.to) {
+      query.andWhere('location.received_at <= :to', {
+        to: new Date(options.to),
+      });
+    }
+
+    const recentDesc = await query
+      .clone()
+      .orderBy('location.recorded_at', 'DESC')
+      .addOrderBy('location.received_at', 'DESC')
+      .take(limit)
+      .getMany();
+
+    return recentDesc.reverse();
+  }
+
+  private async fetchLocationsByIdsAscending(ids: string[]): Promise<Location[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return this.locationsRepository
+      .createQueryBuilder('location')
+      .whereInIds(ids)
+      .orderBy('location.recorded_at', 'ASC')
+      .addOrderBy('location.received_at', 'ASC')
+      .getMany();
   }
 
   private async findRecentValidLocations(

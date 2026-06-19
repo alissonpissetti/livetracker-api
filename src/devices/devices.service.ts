@@ -51,6 +51,29 @@ export class DevicesService {
     return !!device.emergency_until && device.emergency_until.getTime() > Date.now();
   }
 
+  async normalizeEmergency(device: Device | null): Promise<Device | null> {
+    if (!device?.emergency_until) {
+      return device;
+    }
+
+    if (this.isEmergencyActive(device)) {
+      return device;
+    }
+
+    device.emergency_until = null;
+    device.emergency_activated_at = null;
+    return this.devicesRepository.save(device);
+  }
+
+  async findHardwareForSubscription(deviceId?: string | null): Promise<Device | null> {
+    if (!deviceId) {
+      return null;
+    }
+
+    const device = await this.findByDeviceIdOptional(deviceId);
+    return this.normalizeEmergency(device);
+  }
+
   getDeviceConfig(device: Device): DeviceConfigDto {
     const emergencyActive = this.isEmergencyActive(device);
 
@@ -71,19 +94,37 @@ export class DevicesService {
   getEmergencyState(device: Device | null): {
     emergency_until: string | null;
     emergency_active: boolean;
+    emergency_remaining_sec: number;
   } {
-    if (!device || !this.isEmergencyActive(device)) {
-      return { emergency_until: null, emergency_active: false };
+    if (!device?.emergency_until) {
+      return {
+        emergency_until: null,
+        emergency_active: false,
+        emergency_remaining_sec: 0,
+      };
     }
 
+    const remainingMs = device.emergency_until.getTime() - Date.now();
+    if (remainingMs <= 0) {
+      return {
+        emergency_until: null,
+        emergency_active: false,
+        emergency_remaining_sec: 0,
+      };
+    }
+
+    const maxRemainingSec = DEVICE_CONFIG.EMERGENCY_DURATION_MS / 1000;
+    const remainingSec = Math.min(Math.ceil(remainingMs / 1000), maxRemainingSec);
+
     return {
-      emergency_until: device.emergency_until!.toISOString(),
+      emergency_until: device.emergency_until.toISOString(),
       emergency_active: true,
+      emergency_remaining_sec: remainingSec,
     };
   }
 
   async activateEmergency(deviceId: string): Promise<Device> {
-    const device = await this.findByDeviceId(deviceId);
+    const device = await this.ensureExists(deviceId);
     const now = new Date();
 
     device.emergency_activated_at = now;
@@ -95,11 +136,7 @@ export class DevicesService {
   }
 
   async deactivateEmergency(deviceId: string): Promise<Device> {
-    const device = await this.findByDeviceId(deviceId);
-
-    if (!this.isEmergencyActive(device) && !device.emergency_activated_at) {
-      throw new BadRequestException('Modo emergência não está ativo');
-    }
+    const device = await this.ensureExists(deviceId);
 
     device.emergency_until = null;
     device.emergency_activated_at = null;

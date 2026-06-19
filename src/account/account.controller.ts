@@ -50,7 +50,7 @@ async function toDeviceDto(
   devicesService: DevicesService,
 ): Promise<AccountDeviceDto> {
   const isActive = subscriptionsService.isActive(subscription);
-  const hardware = await devicesService.findByDeviceIdOptional(subscription.device_id);
+  const hardware = await devicesService.findHardwareForSubscription(subscription.device_id);
   const emergency = devicesService.getEmergencyState(hardware);
 
   return {
@@ -65,6 +65,7 @@ async function toDeviceDto(
     order_id: subscription.order_id,
     emergency_until: emergency.emergency_until,
     emergency_active: emergency.emergency_active,
+    emergency_remaining_sec: emergency.emergency_remaining_sec,
   };
 }
 
@@ -184,9 +185,11 @@ export class AccountController {
     const locations = await this.locationsService.findRouteByDevice(
       subscription.device_id,
       {
-        limit: query.limit ?? 500,
+        limit: query.limit,
         from: query.from,
         to: query.to,
+        since: query.since,
+        full: query.full,
       },
     );
 
