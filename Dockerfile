@@ -2,10 +2,19 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
+# bcrypt e outros módulos nativos precisam compilar no node:20-slim
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_OPTIONS=--max-old-space-size=4096
+
 COPY package.json package-lock.json* ./
-RUN npm install
+
+RUN npm ci
 
 COPY . .
+
 RUN npm run build \
   && npm prune --omit=dev
 
