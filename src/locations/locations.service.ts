@@ -11,6 +11,7 @@ import {
   impliedSpeedKmh,
   isInvalidComparedToPrevious,
 } from './location-quality.util';
+import { collapseNearbyLocations } from './location-collapse.util';
 
 const MAX_INCREMENTAL_LOCATIONS = 500;
 const MAX_TAIL_LOCATIONS = 500;
@@ -96,7 +97,9 @@ export class LocationsService {
     deviceId: string,
     options: { limit?: number; from?: string; to?: string } = {},
   ): Promise<Location[]> {
-    return this.findByDevice(deviceId, { ...options, order: 'desc' });
+    const locations = await this.findByDevice(deviceId, { ...options, order: 'desc' });
+    const ascending = [...locations].reverse();
+    return collapseNearbyLocations(ascending).reverse();
   }
 
   async findRouteByDevice(
@@ -134,10 +137,13 @@ export class LocationsService {
 
     if (locations.length >= 2) {
       await this.reconcileValidityFlags(locations);
-      return this.fetchLocationsByIdsAscending(locations.map((location) => location.id));
+      const reconciled = await this.fetchLocationsByIdsAscending(
+        locations.map((location) => location.id),
+      );
+      return collapseNearbyLocations(reconciled);
     }
 
-    return locations;
+    return collapseNearbyLocations(locations);
   }
 
   private async findAllInRangeAscending(

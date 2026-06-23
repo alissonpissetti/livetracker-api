@@ -2,7 +2,10 @@ import 'reflect-metadata';
 import { config as loadEnv } from 'dotenv';
 import { DataSource } from 'typeorm';
 import { databaseEntities } from './entities';
-import { resolveDbConnectionFromProcessEnv } from './typeorm.config';
+import {
+  buildMariaDbPoolExtraFromEnv,
+  resolveDbConnectionFromProcessEnv,
+} from './typeorm.config';
 
 loadEnv();
 
@@ -21,6 +24,8 @@ function buildDataSource(): DataSource {
 
   const info = resolveDbConnectionFromProcessEnv();
 
+  const connectTimeoutMs = Number(process.env.DB_CONNECT_TIMEOUT_MS ?? 30_000);
+
   return new DataSource({
     type: 'mariadb',
     host: info.host,
@@ -31,7 +36,8 @@ function buildDataSource(): DataSource {
     entities: [...databaseEntities],
     migrations: [__dirname + '/migrations/*{.ts,.js}'],
     synchronize: false,
-    connectTimeout: 30000,
+    connectTimeout: connectTimeoutMs,
+    extra: buildMariaDbPoolExtraFromEnv(),
   });
 }
 

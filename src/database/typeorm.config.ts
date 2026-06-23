@@ -67,6 +67,63 @@ function readDbFlags(config: ConfigService) {
   };
 }
 
+function readDbPoolNumber(
+  config: ConfigService,
+  key: string,
+  fallback: number,
+): number {
+  const raw = config.get<string>(key, String(fallback)).trim();
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/** Opções do pool mysql2 — evita ETIMEDOUT em conexões ociosas (NAT / wait_timeout). */
+export function buildMariaDbPoolExtra(
+  config: ConfigService,
+): Record<string, unknown> {
+  const connectionLimit = readDbPoolNumber(config, 'DB_POOL_SIZE', 10);
+  const idleTimeoutMs = readDbPoolNumber(config, 'DB_POOL_IDLE_MS', 45_000);
+  const connectTimeoutMs = readDbPoolNumber(
+    config,
+    'DB_CONNECT_TIMEOUT_MS',
+    30_000,
+  );
+
+  return {
+    connectionLimit,
+    waitForConnections: true,
+    queueLimit: 0,
+    maxIdle: connectionLimit,
+    idleTimeout: idleTimeoutMs,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10_000,
+    connectTimeout: connectTimeoutMs,
+  };
+}
+
+export function buildMariaDbPoolExtraFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, unknown> {
+  const read = (key: string, fallback: number) => {
+    const raw = (env[key] ?? String(fallback)).trim();
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  };
+
+  const connectionLimit = read('DB_POOL_SIZE', 10);
+
+  return {
+    connectionLimit,
+    waitForConnections: true,
+    queueLimit: 0,
+    maxIdle: connectionLimit,
+    idleTimeout: read('DB_POOL_IDLE_MS', 45_000),
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10_000,
+    connectTimeout: read('DB_CONNECT_TIMEOUT_MS', 30_000),
+  };
+}
+
 export function logDbConnectionTarget(config: ConfigService): void {
   const info = resolveDbConnectionInfo(config);
 
@@ -93,6 +150,12 @@ function buildMariaDbConfig(config: ConfigService): TypeOrmModuleOptions {
     `[DB] Modo: synchronize=${flags.synchronize}, migrationsRun=${flags.migrationsRun}`,
   );
 
+  const connectTimeoutMs = readDbPoolNumber(
+    config,
+    'DB_CONNECT_TIMEOUT_MS',
+    30_000,
+  );
+
   return {
     type: 'mariadb',
     host: info.host,
@@ -105,7 +168,10 @@ function buildMariaDbConfig(config: ConfigService): TypeOrmModuleOptions {
     synchronize: flags.synchronize,
     migrationsRun: flags.migrationsRun,
     logging: flags.logging,
-    connectTimeout: 30000,
+    connectTimeout: connectTimeoutMs,
+    retryAttempts: readDbPoolNumber(config, 'DB_RETRY_ATTEMPTS', 5),
+    retryDelay: readDbPoolNumber(config, 'DB_RETRY_DELAY_MS', 2_000),
+    extra: buildMariaDbPoolExtra(config),
     timezone: 'Z',
   };
 }

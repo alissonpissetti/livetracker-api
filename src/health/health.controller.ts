@@ -1,20 +1,41 @@
-import { Controller, Get } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { DataSource } from 'typeorm';
 
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
+  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+
   @Get()
   @ApiOperation({
-    summary: 'Verificar se a API está no ar',
+    summary: 'Verificar se a API e o banco estão no ar',
     description:
-      'Endpoint simples para monitoramento e health checks de deploy (Coolify, Docker, etc.).',
+      'Endpoint para monitoramento e health checks de deploy (Coolify, Docker, etc.).',
   })
   @ApiOkResponse({
-    description: 'API respondendo normalmente',
-    schema: { example: { status: 'ok' } },
+    description: 'API e banco respondendo normalmente',
+    schema: {
+      example: { status: 'ok', database: 'up' },
+    },
   })
-  check() {
-    return { status: 'ok' };
+  async check() {
+    try {
+      await this.dataSource.query('SELECT 1');
+      return { status: 'ok', database: 'up' };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'database unreachable';
+      throw new ServiceUnavailableException({
+        status: 'degraded',
+        database: 'down',
+        error: message,
+      });
+    }
   }
 }
