@@ -22,7 +22,7 @@ export class DevicesController {
   @ApiOperation({
     summary: 'Configuração remota do rastreador',
     description:
-      'Consultado periodicamente pelo firmware para modo emergência, intervalos de envio e PIN de SMS.',
+      'Consultado periodicamente pelo firmware para intervalos de envio e PIN de SMS.',
   })
   @ApiParam({
     name: 'deviceId',

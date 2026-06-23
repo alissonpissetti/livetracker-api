@@ -8,11 +8,9 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomInt } from 'crypto';
 import { Repository } from 'typeorm';
-import { SmsService } from '../auth/sms.service';
 import { normalizeBrCellphone, normalizeSimMsisdn } from '../lib/phone-br';
 import { CreateLocationDto } from '../locations/dto/create-location.dto';
 import { DEVICE_CONFIG } from './device-config.constants';
-import { DEVICE_SMS_ACTIONS } from './device-sms.constants';
 import { DeviceConfigDto } from './dto/device-config.dto';
 import { BlockDeviceDto } from './dto/block-device.dto';
 import { Device } from './entities/device.entity';
@@ -24,7 +22,6 @@ export class DevicesService {
   constructor(
     @InjectRepository(Device)
     private readonly devicesRepository: Repository<Device>,
-    private readonly smsService: SmsService,
   ) {}
 
   async findAll(): Promise<Device[]> {
@@ -55,106 +52,18 @@ export class DevicesService {
     });
   }
 
-  isEmergencyActive(device: Device): boolean {
-    return !!device.emergency_until && device.emergency_until.getTime() > Date.now();
-  }
-
-  async normalizeEmergency(device: Device | null): Promise<Device | null> {
-    if (!device?.emergency_until) {
-      return device;
-    }
-
-    if (this.isEmergencyActive(device)) {
-      return device;
-    }
-
-    device.emergency_until = null;
-    device.emergency_activated_at = null;
-    return this.devicesRepository.save(device);
-  }
-
   async findHardwareForSubscription(deviceId?: string | null): Promise<Device | null> {
-    if (!deviceId) {
-      return null;
-    }
-
-    const device = await this.findByDeviceIdOptional(deviceId);
-    return this.normalizeEmergency(device);
+    return this.findByDeviceIdOptional(deviceId);
   }
 
   getDeviceConfig(device: Device): DeviceConfigDto {
-    const emergencyActive = this.isEmergencyActive(device);
-
     return {
-      mode: emergencyActive ? 'emergency' : 'normal',
-      emergency_until: emergencyActive
-        ? device.emergency_until!.toISOString()
-        : null,
-      report_interval_sec: emergencyActive
-        ? DEVICE_CONFIG.REPORT_INTERVAL_EMERGENCY_SEC
-        : DEVICE_CONFIG.REPORT_INTERVAL_MOVING_SEC,
+      report_interval_sec: DEVICE_CONFIG.REPORT_INTERVAL_MOVING_SEC,
       config_poll_interval_sec: DEVICE_CONFIG.CONFIG_POLL_INTERVAL_SEC,
       stop_distance_m: DEVICE_CONFIG.STOP_DISTANCE_M,
       stop_samples_required: DEVICE_CONFIG.STOP_SAMPLES_REQUIRED,
       sms_command_pin: device.sms_command_pin ?? '',
     };
-  }
-
-  getEmergencyState(device: Device | null): {
-    emergency_until: string | null;
-    emergency_active: boolean;
-    emergency_remaining_sec: number;
-  } {
-    if (!device?.emergency_until) {
-      return {
-        emergency_until: null,
-        emergency_active: false,
-        emergency_remaining_sec: 0,
-      };
-    }
-
-    const remainingMs = device.emergency_until.getTime() - Date.now();
-    if (remainingMs <= 0) {
-      return {
-        emergency_until: null,
-        emergency_active: false,
-        emergency_remaining_sec: 0,
-      };
-    }
-
-    const maxRemainingSec = DEVICE_CONFIG.EMERGENCY_DURATION_MS / 1000;
-    const remainingSec = Math.min(Math.ceil(remainingMs / 1000), maxRemainingSec);
-
-    return {
-      emergency_until: device.emergency_until.toISOString(),
-      emergency_active: true,
-      emergency_remaining_sec: remainingSec,
-    };
-  }
-
-  async activateEmergency(deviceId: string): Promise<Device> {
-    const device = await this.ensureExists(deviceId);
-    const now = new Date();
-
-    device.emergency_activated_at = now;
-    device.emergency_until = new Date(
-      now.getTime() + DEVICE_CONFIG.EMERGENCY_DURATION_MS,
-    );
-
-    const saved = await this.devicesRepository.save(device);
-    await this.sendEmergencyCommandSms(saved, true);
-    return saved;
-  }
-
-  async deactivateEmergency(deviceId: string): Promise<Device> {
-    const device = await this.ensureExists(deviceId);
-
-    device.emergency_until = null;
-    device.emergency_activated_at = null;
-
-    const saved = await this.devicesRepository.save(device);
-    await this.sendEmergencyCommandSms(saved, false);
-    return saved;
   }
 
   async assertCanReceiveLocations(deviceId: string): Promise<Device> {
@@ -295,7 +204,17 @@ export class DevicesService {
     let device = await this.assertCanReceiveLocations(deviceId);
 
     if (dto.sim_msisdn) {
-      device = await this.updateSimMsisdn(device, dto.sim_msisdn);
+      try {
+        device = await this.updateSimMsisdn(device, dto.sim_msisdn);
+      } catch (error) {
+        if (error instanceof BadRequestException) {
+          this.logger.warn(
+            `MSISDN inválido ignorado no registry de ${deviceId}: ${dto.sim_msisdn}`,
+          );
+        } else {
+          throw error;
+        }
+      }
     }
 
     if (
@@ -308,38 +227,6 @@ export class DevicesService {
 
     device.last_seen_at = new Date();
     return this.devicesRepository.save(device);
-  }
-
-  buildEmergencySmsBody(active: boolean): string {
-    return active
-      ? DEVICE_SMS_ACTIONS.EMERGENCY_ACTIVATE
-      : DEVICE_SMS_ACTIONS.EMERGENCY_DEACTIVATE;
-  }
-
-  async sendEmergencyCommandSms(device: Device, active: boolean): Promise<void> {
-    if (!device.sim_msisdn) {
-      this.logger.warn(
-        `SMS de emergência não enviado para ${device.device_id}: número do chip ainda desconhecido (cadastre em Configurações ou aguarde o equipamento reportar +CNUM)`,
-      );
-      return;
-    }
-
-    try {
-      const message = this.buildEmergencySmsBody(active);
-      await this.smsService.sendNotification(
-        device.sim_msisdn,
-        message,
-        'comando equipamento',
-      );
-      this.logger.log(
-        `SMS de emergência (${message}) enviado para equipamento ${device.device_id} → ****${device.sim_msisdn.slice(-4)}`,
-      );
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `Falha ao enviar SMS de comando para ${device.device_id}: ${reason}`,
-      );
-    }
   }
 
   private generateSmsCommandPin(): string {

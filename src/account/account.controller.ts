@@ -57,7 +57,6 @@ async function toDeviceDto(
   const hardwareWithPin = hardware
     ? await devicesService.ensureSmsCommandPin(hardware)
     : null;
-  const emergency = devicesService.getEmergencyState(hardwareWithPin);
   const period = subscriptionsService.buildPeriodInfo(subscription);
 
   return {
@@ -74,9 +73,6 @@ async function toDeviceDto(
     is_active: isActive,
     awaiting_activation: !subscription.device_id,
     order_id: subscription.order_id,
-    emergency_until: emergency.emergency_until,
-    emergency_active: emergency.emergency_active,
-    emergency_remaining_sec: emergency.emergency_remaining_sec,
     alert_battery_low_enabled: subscription.alert_battery_low_enabled,
     alert_battery_full_enabled: subscription.alert_battery_full_enabled,
     last_battery_percent: hardwareWithPin?.last_battery_percent ?? null,
@@ -178,7 +174,7 @@ export class AccountController {
 
   @Get('devices/:id')
   @ApiOperation({
-    summary: 'Detalhes do equipamento na conta (telemetria de energia, emergência, etc.)',
+    summary: 'Detalhes do equipamento na conta (telemetria de energia, etc.)',
   })
   @ApiParam({ name: 'id', description: 'ID do slot/equipamento na conta' })
   @ApiOkResponse({ type: AccountDeviceDto })
@@ -324,50 +320,6 @@ export class AccountController {
       ),
       locations: locations.map(toLocationDto),
     };
-  }
-
-  @Post('devices/:id/emergency')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Ativar modo emergência por 30 minutos' })
-  @ApiParam({ name: 'id', description: 'ID do slot/equipamento na conta' })
-  @ApiOkResponse({ type: AccountDeviceDto })
-  async activateEmergency(
-    @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-  ) {
-    const subscription = await this.subscriptionsService.findByIdForUser(id, user.id);
-
-    if (!subscription.device_id) {
-      throw new BadRequestException(
-        'Ative o IMEI do equipamento antes de usar o modo emergência',
-      );
-    }
-
-    if (!this.subscriptionsService.isActive(subscription)) {
-      throw new BadRequestException('Assinatura inativa — modo emergência indisponível');
-    }
-
-    await this.devicesService.activateEmergency(subscription.device_id);
-    return await toDeviceDto(subscription, this.subscriptionsService, this.devicesService);
-  }
-
-  @Delete('devices/:id/emergency')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Encerrar modo emergência manualmente' })
-  @ApiParam({ name: 'id', description: 'ID do slot/equipamento na conta' })
-  @ApiOkResponse({ type: AccountDeviceDto })
-  async deactivateEmergency(
-    @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-  ) {
-    const subscription = await this.subscriptionsService.findByIdForUser(id, user.id);
-
-    if (!subscription.device_id) {
-      throw new BadRequestException('Equipamento sem IMEI ativado');
-    }
-
-    await this.devicesService.deactivateEmergency(subscription.device_id);
-    return await toDeviceDto(subscription, this.subscriptionsService, this.devicesService);
   }
 
   @Post('devices/:id/share-links')

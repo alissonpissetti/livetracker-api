@@ -40,12 +40,6 @@ export class Device {
   @UpdateDateColumn()
   last_seen_at: Date;
 
-  @Column({ type: 'datetime', nullable: true })
-  emergency_until?: Date | null;
-
-  @Column({ type: 'datetime', nullable: true })
-  emergency_activated_at?: Date | null;
-
   @Column({ type: 'int', nullable: true })
   last_battery_percent?: number | null;
 

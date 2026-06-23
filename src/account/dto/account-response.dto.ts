@@ -46,15 +46,6 @@ export class AccountDeviceDto {
   @ApiPropertyOptional()
   order_id?: string;
 
-  @ApiPropertyOptional({ nullable: true })
-  emergency_until?: string | null;
-
-  @ApiProperty()
-  emergency_active: boolean;
-
-  @ApiProperty()
-  emergency_remaining_sec: number;
-
   @ApiProperty()
   alert_battery_low_enabled: boolean;
 

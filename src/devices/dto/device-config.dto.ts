@@ -1,16 +1,10 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class DeviceConfigDto {
-  @ApiProperty({ enum: ['normal', 'emergency'] })
-  mode: 'normal' | 'emergency';
-
-  @ApiPropertyOptional({ nullable: true })
-  emergency_until: string | null;
-
-  @ApiProperty({ example: 120 })
+  @ApiProperty({ example: 10 })
   report_interval_sec: number;
 
-  @ApiProperty({ example: 60 })
+  @ApiProperty({ example: 10 })
   config_poll_interval_sec: number;
 
   @ApiProperty({ example: 40 })
